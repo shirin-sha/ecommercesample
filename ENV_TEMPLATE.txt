@@ -1,0 +1,38 @@
+# Copy this file to .env.local and fill in your values
+
+# ===========================================
+# MongoDB Configuration
+# ===========================================
+
+# Option 1: Local MongoDB (Development)
+MONGODB_URI=mongodb://localhost:27017/ecommerce
+
+# Option 2: MongoDB Atlas (Cloud - Recommended for production)
+# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/ecommerce?retryWrites=true&w=majority
+
+# ===========================================
+# Application Environment
+# ===========================================
+NODE_ENV=development
+
+# ===========================================
+# Future: Authentication (NextAuth)
+# ===========================================
+# NEXTAUTH_URL=http://localhost:3000
+# NEXTAUTH_SECRET=your-secret-key-here
+
+# ===========================================
+# Future: Payment Integration (Stripe)
+# ===========================================
+# STRIPE_PUBLIC_KEY=pk_test_...
+# STRIPE_SECRET_KEY=sk_test_...
+# STRIPE_WEBHOOK_SECRET=whsec_...
+
+# ===========================================
+# Future: Email Service
+# ===========================================
+# EMAIL_SERVER=smtp://username:password@smtp.example.com:587
+# EMAIL_FROM=noreply@yoursite.com
+
+
+
