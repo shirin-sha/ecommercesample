@@ -21,7 +21,7 @@ export default function AdminHeader() {
         <Link href="/admin/dashboard" className="flex items-center gap-2">
           <Store className="w-6 h-6 text-blue-600" />
           <span className="text-xl font-bold text-gray-900 dark:text-white">
-            ShopHub Admin
+            Admin
           </span>
         </Link>
 

@@ -89,3 +89,98 @@ export async function GET(request: Request) {
   }
 }
 
+export async function POST(request: Request) {
+  try {
+    await connectDB()
+
+    const body = await request.json()
+    const {
+      name,
+      description,
+      price,
+      originalPrice,
+      category,
+      image,
+      images,
+      stockQuantity,
+      inStock,
+      slug,
+      rating,
+      reviews,
+      tags,
+    } = body
+
+    // Validate required fields
+    if (!name || !description || !price || !category || !image || slug === undefined) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      )
+    }
+
+    // Check if slug already exists
+    const existingProduct = await Product.findOne({ slug })
+    if (existingProduct) {
+      return NextResponse.json(
+        { error: 'A product with this slug already exists' },
+        { status: 400 }
+      )
+    }
+
+    // Create new product
+    const product = new Product({
+      name: name.trim(),
+      description: description.trim(),
+      price: parseFloat(price),
+      originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
+      category: category.trim(),
+      image: image.trim(),
+      images: images || [],
+      stockQuantity: parseInt(stockQuantity) || 0,
+      inStock: inStock !== undefined ? inStock : true,
+      slug: slug.trim().toLowerCase(),
+      rating: rating ? parseFloat(rating) : undefined,
+      reviews: reviews ? parseInt(reviews) : undefined,
+      tags: tags || [],
+    })
+
+    await product.save()
+
+    // Convert MongoDB _id to id
+    const formattedProduct = {
+      ...product.toObject(),
+      id: product._id.toString(),
+      _id: undefined,
+    }
+
+    return NextResponse.json(
+      { product: formattedProduct, message: 'Product created successfully' },
+      { status: 201 }
+    )
+  } catch (error: any) {
+    console.error('Error creating product:', error)
+    
+    // Handle duplicate key error (slug)
+    if (error.code === 11000) {
+      return NextResponse.json(
+        { error: 'A product with this slug already exists' },
+        { status: 400 }
+      )
+    }
+
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map((err: any) => err.message)
+      return NextResponse.json(
+        { error: errors.join(', ') },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to create product' },
+      { status: 500 }
+    )
+  }
+}
+
