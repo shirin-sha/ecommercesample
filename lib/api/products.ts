@@ -41,7 +41,10 @@ export async function fetchProducts(
   const url = `/api/products${queryString ? `?${queryString}` : ''}`
 
   const response = await fetch(url, {
-    cache: 'no-store', // Always fetch fresh data
+    // Use Next.js caching for better performance
+    next: { 
+      revalidate: filters ? 60 : 300 // Revalidate: 1 min for filtered, 5 min for base
+    }
   })
 
   if (!response.ok) {
@@ -56,7 +59,7 @@ export async function fetchProducts(
  */
 export async function fetchProduct(idOrSlug: string): Promise<Product> {
   const response = await fetch(`/api/products/${idOrSlug}`, {
-    cache: 'no-store',
+    next: { revalidate: 300 } // Cache for 5 minutes
   })
 
   if (!response.ok) {
@@ -75,7 +78,7 @@ export async function fetchProduct(idOrSlug: string): Promise<Product> {
  */
 export async function fetchCategories(): Promise<string[]> {
   const response = await fetch('/api/products', {
-    cache: 'no-store',
+    next: { revalidate: 600 } // Cache categories for 10 minutes
   })
 
   if (!response.ok) {

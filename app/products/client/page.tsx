@@ -1,22 +1,47 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ProductCard from '@/components/features/ProductCard'
-import { useProducts } from '@/lib/hooks/useProducts'
+import { fetchProducts } from '@/lib/api/products'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { Search, Filter, X } from 'lucide-react'
-import type { ProductFilters } from '@/lib/types'
+import type { ProductFilters, Product } from '@/lib/types'
 
-export default function ProductsClientPage() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>()
-  const [sortBy, setSortBy] = useState<ProductFilters['sortBy']>('price-asc')
+interface ProductsClientPageProps {
+  initialProducts: Product[]
+  initialCategories: string[]
+}
+
+export default function ProductsClientPage({ 
+  initialProducts, 
+  initialCategories 
+}: ProductsClientPageProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
+  
+  // Initialize state from URL params or defaults
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(
+    searchParams.get('category') || undefined
+  )
+  const [sortBy, setSortBy] = useState<ProductFilters['sortBy']>(
+    (searchParams.get('sortBy') as ProductFilters['sortBy']) || 'price-asc'
+  )
   const [showFilters, setShowFilters] = useState(false)
-  const [minPrice, setMinPrice] = useState('')
-  const [maxPrice, setMaxPrice] = useState('')
-  const [inStockOnly, setInStockOnly] = useState(false)
+  const [minPrice, setMinPrice] = useState(searchParams.get('minPrice') || '')
+  const [maxPrice, setMaxPrice] = useState(searchParams.get('maxPrice') || '')
+  const [inStockOnly, setInStockOnly] = useState(
+    searchParams.get('inStockOnly') === 'true'
+  )
+
+  // Use initial data, update when filters change
+  const [products, setProducts] = useState(initialProducts)
+  const [categories] = useState(initialCategories)
+  const [error, setError] = useState<string | null>(null)
 
   // Build filters object
   const filters: ProductFilters = useMemo(() => ({
@@ -28,7 +53,49 @@ export default function ProductsClientPage() {
     inStockOnly,
   }), [searchQuery, selectedCategory, sortBy, minPrice, maxPrice, inStockOnly])
 
-  const { products, categories, loading, error } = useProducts(filters)
+  // Update URL and fetch when filters change
+  const updateFilters = useRef(async (newFilters: ProductFilters) => {
+    const params = new URLSearchParams()
+    if (newFilters.category) params.set('category', newFilters.category)
+    if (newFilters.search) params.set('search', newFilters.search)
+    if (newFilters.sortBy) params.set('sortBy', newFilters.sortBy)
+    if (newFilters.minPrice !== undefined) params.set('minPrice', newFilters.minPrice.toString())
+    if (newFilters.maxPrice !== undefined) params.set('maxPrice', newFilters.maxPrice.toString())
+    if (newFilters.inStockOnly) params.set('inStockOnly', 'true')
+
+    startTransition(() => {
+      router.push(`/products?${params.toString()}`, { scroll: false })
+    })
+
+    try {
+      setError(null)
+      const data = await fetchProducts(newFilters)
+      setProducts(data.products)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load products')
+    }
+  })
+
+  // Track if this is the initial mount
+  const isInitialMount = useRef(true)
+
+  // Update products when filters change (debounced for search)
+  useEffect(() => {
+    // Skip on initial mount since we already have initial data
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      updateFilters.current(filters)
+    }, searchQuery ? 300 : 0) // Debounce only for search, immediate for other filters
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, selectedCategory, sortBy, minPrice, maxPrice, inStockOnly])
+
+  const loading = isPending
 
   const handleClearFilters = () => {
     setSearchQuery('')
@@ -37,6 +104,10 @@ export default function ProductsClientPage() {
     setMaxPrice('')
     setInStockOnly(false)
     setSortBy('price-asc')
+    router.push('/products', { scroll: false })
+    updateFilters.current({
+      sortBy: 'price-asc',
+    })
   }
 
   const hasActiveFilters = selectedCategory || searchQuery || minPrice || maxPrice || inStockOnly
@@ -181,11 +252,23 @@ export default function ProductsClientPage() {
         </div>
       </div>
 
-      {/* Loading State */}
+      {/* Loading State - Show skeleton while loading */}
       {loading && (
-        <div className="text-center py-16">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading products...</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-full flex flex-col border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+              <div className="aspect-square bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+              <div className="p-4 flex-1 flex flex-col gap-3">
+                <div className="h-5 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="h-6 w-full bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="flex items-center justify-between mt-auto">
+                  <div className="h-7 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  <div className="h-9 w-20 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

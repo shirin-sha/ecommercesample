@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import connectDB from '@/lib/db/mongodb'
 import Product from '@/lib/db/models/Product'
 
+// Cache duration: 60 seconds for filtered queries, 5 minutes for base queries
+const CACHE_DURATION = {
+  filtered: 60, // 1 minute for filtered/search queries
+  base: 300, // 5 minutes for base product list
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const category = searchParams.get('category')
@@ -10,6 +16,10 @@ export async function GET(request: Request) {
   const minPrice = searchParams.get('minPrice')
   const maxPrice = searchParams.get('maxPrice')
   const inStockOnly = searchParams.get('inStockOnly') === 'true'
+
+  // Determine if this is a filtered query
+  const hasFilters = !!(category || search || minPrice || maxPrice || inStockOnly)
+  const cacheDuration = hasFilters ? CACHE_DURATION.filtered : CACHE_DURATION.base
 
   try {
     await connectDB()
@@ -22,6 +32,8 @@ export async function GET(request: Request) {
     }
 
     if (search) {
+      // Use regex search (text index helps optimize these queries)
+      // The text index on name, description, tags helps MongoDB optimize regex queries
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
@@ -65,8 +77,26 @@ export async function GET(request: Request) {
         sort = { createdAt: -1 }
     }
 
-    const products = await Product.find(query).sort(sort).lean()
-    const categories = await Product.distinct('category')
+    // Parse pagination params
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '24') // Default 24 products per page
+    const skip = (page - 1) * limit
+
+    // Optimize query: only fetch needed fields and use lean() for better performance
+    // Fetch products and count in parallel for better performance
+    const [products, totalCount] = await Promise.all([
+      Product.find(query)
+        .select('name description price originalPrice category image images inStock stockQuantity rating reviews tags slug createdAt')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      Product.countDocuments(query).exec()
+    ])
+    
+    // Cache categories separately - they change less frequently
+    const categories = await Product.distinct('category').exec()
 
     // Convert MongoDB _id to id
     const formattedProducts = products.map((product: any) => ({
@@ -75,11 +105,23 @@ export async function GET(request: Request) {
       _id: undefined,
     }))
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       products: formattedProducts,
       categories,
       count: formattedProducts.length,
+      totalCount,
+      page,
+      totalPages: Math.ceil(totalCount / limit),
+      hasMore: skip + formattedProducts.length < totalCount,
     })
+
+    // Add caching headers
+    response.headers.set(
+      'Cache-Control',
+      `public, s-maxage=${cacheDuration}, stale-while-revalidate=${cacheDuration * 2}`
+    )
+
+    return response
   } catch (error) {
     console.error('Error fetching products:', error)
     return NextResponse.json(

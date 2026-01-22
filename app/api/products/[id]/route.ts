@@ -33,7 +33,15 @@ export async function GET(
       _id: undefined,
     }
 
-    return NextResponse.json({ product: formattedProduct })
+    const response = NextResponse.json({ product: formattedProduct })
+    
+    // Cache individual products for 5 minutes
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=300, stale-while-revalidate=600'
+    )
+
+    return response
   } catch (error) {
     console.error('Error fetching product:', error)
     return NextResponse.json(

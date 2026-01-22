@@ -95,6 +95,14 @@ const productSchema = new Schema<IProduct>(
 productSchema.index({ category: 1 })
 productSchema.index({ price: 1 })
 productSchema.index({ inStock: 1 })
+productSchema.index({ rating: -1 })
+productSchema.index({ createdAt: -1 })
+
+// Compound indexes for common query patterns
+productSchema.index({ category: 1, price: 1 }) // Category + price sorting
+productSchema.index({ category: 1, inStock: 1, price: 1 }) // Category filter with stock and price
+productSchema.index({ inStock: 1, price: 1 }) // Stock filter with price sorting
+productSchema.index({ name: 'text', description: 'text', tags: 'text' }) // Text search index
 
 const Product: Model<IProduct> =
   mongoose.models.Product || mongoose.model<IProduct>('Product', productSchema)

@@ -114,5 +114,100 @@ export async function searchProducts(query: string): Promise<ProductType[]> {
   }
 }
 
+/**
+ * Get products with filters (server-side)
+ */
+export async function getProductsWithFilters(filters?: {
+  category?: string
+  search?: string
+  sortBy?: string
+  minPrice?: number
+  maxPrice?: number
+  inStockOnly?: boolean
+}): Promise<{ products: ProductType[]; categories: string[] }> {
+  try {
+    await connectDB()
+
+    // Build query
+    let query: any = {}
+    
+    if (filters?.category) {
+      query.category = filters.category
+    }
+
+    if (filters?.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { description: { $regex: filters.search, $options: 'i' } },
+        { tags: { $in: [new RegExp(filters.search, 'i')] } },
+      ]
+    }
+
+    // Price range filter
+    if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
+      query.price = {}
+      if (filters?.minPrice !== undefined) {
+        query.price.$gte = filters.minPrice
+      }
+      if (filters?.maxPrice !== undefined) {
+        query.price.$lte = filters.maxPrice
+      }
+    }
+
+    // Stock filter
+    if (filters?.inStockOnly) {
+      query.inStock = true
+      query.stockQuantity = { $gt: 0 }
+    }
+
+    // Build sort
+    let sort: any = {}
+    switch (filters?.sortBy) {
+      case 'price-asc':
+        sort = { price: 1 }
+        break
+      case 'price-desc':
+        sort = { price: -1 }
+        break
+      case 'name':
+        sort = { name: 1 }
+        break
+      case 'rating':
+        sort = { rating: -1 }
+        break
+      default:
+        sort = { createdAt: -1 }
+    }
+
+    // Parse pagination
+    const page = 1 // Server-side default
+    const limit = 24 // Default 24 products per page
+    const skip = 0
+
+    // Optimize query: only fetch needed fields
+    // Fetch products, count, and categories in parallel for better performance
+    const [products, totalCount, categories] = await Promise.all([
+      Product.find(query)
+        .select('name description price originalPrice category image images inStock stockQuantity rating reviews tags slug createdAt')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      Product.countDocuments(query).exec(),
+      Product.distinct('category').exec()
+    ])
+
+    return {
+      products: products.map(formatProduct),
+      categories,
+      totalCount,
+    }
+  } catch (error) {
+    console.error('Error fetching products with filters:', error)
+    return { products: [], categories: [] }
+  }
+}
+
 
 
