@@ -124,7 +124,7 @@ export async function getProductsWithFilters(filters?: {
   minPrice?: number
   maxPrice?: number
   inStockOnly?: boolean
-}): Promise<{ products: ProductType[]; categories: string[] }> {
+}): Promise<{ products: ProductType[]; categories: string[]; totalCount: number }> {
   try {
     await connectDB()
 
@@ -205,7 +205,7 @@ export async function getProductsWithFilters(filters?: {
     }
   } catch (error) {
     console.error('Error fetching products with filters:', error)
-    return { products: [], categories: [] }
+    return { products: [], categories: [], totalCount: 0 }
   }
 }
 
